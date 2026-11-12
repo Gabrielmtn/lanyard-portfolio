@@ -292,6 +292,14 @@ wall.reducedMotion = true;
 </lanyard-wall>
 ```
 
+**A line in the corner.** Anything with `slot="corner"` sits in the bottom-right corner of the badge area, in small type: a credit, or a link.
+
+```html
+<a slot="corner" href="https://github.com/Gabrielmtn/lanyard-portfolio">Made with Lanyard Portfolio</a>
+```
+
+Style it from outside with `::part(corner)`. On narrow screens it shares the bottom edge with the hint, so either hide the hint (`hint=""`) or move one of them up.
+
 **Room below the badges.** Set `--lanyard-overhang` and the element reaches that far below the badges. Pull the next section of your page up over it with a negative margin and a `z-index` of 3, and a badge dragged or swung low slides behind that section, while a second canvas draws it over the top. Without it, a badge dragged below the wall is simply cut off at the edge.
 
 ```css
