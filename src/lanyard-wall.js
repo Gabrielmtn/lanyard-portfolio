@@ -287,7 +287,9 @@ function drawSwag(s, cv, o) {
 
 function startGL(ctx) {
   const { host: hero, canvas, data, pins: SWAG, o, $ } = ctx;
-  const wall = hero;
+  // hero: the whole element (header slot, badge area and any overhang); the canvas covers all of it.
+  // wall: the badge area, sized to the layout. The lanyards hang from the very top of the hero, behind the header.
+  const wall = $('area'), headEl = $('head'), overCanvas = $('over');
   let reduce = ctx.reduce;   // switchable at runtime with the reduced-motion toggle (setReduced below)
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   renderer.setClearColor(0x000000, 0);
@@ -299,6 +301,20 @@ function startGL(ctx) {
   const scene = new THREE.Scene();
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  // Overhang (--lanyard-overhang): the element reaches that far below the badges, under whatever the page lays over
+  // it there, so a badge dragged or swung low slides behind that content instead of being cut off. A second, see-through
+  // canvas above the page draws just those low or dragged badges on top. Made only when there is an overhang. It needs
+  // its own environment map, since GPU textures don't cross WebGL contexts.
+  let overlay = null, overlayEnv = null, overlayDirty = false;
+  const overhangPx = () => parseFloat(getComputedStyle(hero).paddingBottom) || 0;
+  function ensureOverlay() {
+    if (overlay || !overhangPx()) return;
+    overlay = new THREE.WebGLRenderer({ canvas: overCanvas, antialias: true, alpha: true });
+    overlay.setClearColor(0x000000, 0); overlay.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+    overlay.toneMapping = THREE.NeutralToneMapping;
+    overlayEnv = new THREE.PMREMGenerator(overlay).fromScene(new RoomEnvironment(), 0.04).texture;
+    overCanvas.hidden = false;
+  }
   scene.environmentIntensity = 0.75;
   const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100); camera.position.set(0, 0, 10);
   const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f8c, 0.5); hemi.layers.enable(1); hemi.layers.enable(2); scene.add(hemi);
@@ -470,6 +486,7 @@ function startGL(ctx) {
   function measure() {
     const w = Math.max(1, hero.clientWidth), h = Math.max(1, hero.clientHeight);
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    ensureOverlay(); if (overlay) overlay.setSize(w, h, false);
     // one badge width = one world unit at every screen size, so physics, depth and shadows look the same everywhere
     worldH = h / plan().W; worldW = worldH * camera.aspect;
     camera.position.z = worldH / 2 / Math.tan(THREE.MathUtils.degToRad(15)); camera.far = camera.position.z + 50; camera.updateProjectionMatrix();
@@ -546,7 +563,7 @@ function startGL(ctx) {
     return { mode, W, cards, pins, pinD, height };
   }
   function layout() {
-    const pl = plan(), pxU = hero.clientHeight / worldH, head = 0;
+    const pl = plan(), pxU = hero.clientHeight / worldH, head = wall.offsetTop;
     const wx = x => -worldW / 2 + x / pxU, wy = y => worldH / 2 - (head + y) / pxU;
     const S = pl.W / pxU;
     // A badge hung further back looks closer to the middle of the view, so place it out by the same factor: then it
@@ -573,6 +590,30 @@ function startGL(ctx) {
       lowest = Math.max(lowest, (worldH / 2 - y) * pxU);   // where it will rest, ignoring the load-in lift
     }
     return lowest;
+  }
+  // Cards being dragged, or hanging below the badge area into the overhang, also join layer 1 so the overlay draws
+  // them over the page there. The overlay is clipped below the header, so a badge never pops in front of it.
+  function renderOverlay() {
+    if (!overlay) return;
+    const pxU = hero.clientHeight / worldH, limit = wall.offsetTop + wall.clientHeight - 2;
+    let any = false;
+    for (const L of lanyards) {
+      let low = 0;
+      for (const sx of [-0.5, 0.5]) for (const sy of [-0.5, 0.5]) {
+        corner.set(sx * L.CW, sy * L.CH, 0).applyQuaternion(L.q).add(L.pos);
+        low = Math.max(low, (worldH / 2 - corner.y * camera.position.z / (camera.position.z - corner.z)) * pxU);
+      }
+      const lift = (grab && grab.i === L.i) || low > limit;
+      if (lift !== !!L.lifted) { L.lifted = lift; L.group.traverse(o => lift ? o.layers.enable(1) : o.layers.disable(1)); }
+      any = any || lift;
+    }
+    if (!any) { if (overlayDirty) { overlay.clear(); overlayDirty = false; } return; }
+    overCanvas.style.clipPath = `inset(${Math.max(0, Math.round(headEl.offsetTop + headEl.offsetHeight))}px 0 0 0)`;
+    const env = scene.environment; scene.environment = overlayEnv; camera.layers.set(1);
+    const vis = lanyards.map(L => L.group.visible); lanyards.forEach(L => { L.group.visible = !!L.lifted; });
+    overlay.render(scene, camera);
+    lanyards.forEach((L, k) => { L.group.visible = vis[k]; });
+    camera.layers.set(0); scene.environment = env; overlayDirty = true;
   }
   // Keep each keyboard hit box laid over its badge (rotated rectangle) and pin (circle), in hero-relative pixels.
   const hitP = new THREE.Vector3(), hitA = new THREE.Vector3(), hitB = new THREE.Vector3(), hitR = new THREE.Vector3();
@@ -605,7 +646,7 @@ function startGL(ctx) {
     // can add a scrollbar) every time someone pushed a badge sideways. Only measure once every card has come to rest.
     if (!first) for (const L of lanyards) if (L.vel.length() > 0.3 * S || L.ang.length() > 0.3 || L.unspin) return;
     const lowest = lowestCardPx();
-    const need = lowest + 28 - wall.clientHeight; // settled cards stay inside the wall, above the about section
+    const need = lowest + 28 - (wall.offsetTop + wall.clientHeight); // settled cards stay inside the badge area, above any overhang
     if (need > 0) { extraPad += Math.ceil(need) + 24; sizeWall(); }
   }
 
@@ -1195,7 +1236,7 @@ function startGL(ctx) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now; acc += dt;
     applyIntro(dt);
     let n = 0; while (acc >= H && n < 24) { step(H); acc -= H; n++; } if (n === 24) acc = 0;
-    syncMeshes(); animateSwag(); renderMain(); placeHits();
+    syncMeshes(); animateSwag(); renderMain(); renderOverlay(); placeHits();
     // first frames are drawn while the page is still hidden (shaders compile, textures upload); once two are done and
     // the wall has sized itself around the badges' resting places, start the whole reveal
     if (++drawn === 2) { fitCheck(true); ctx.onReady(); }
@@ -1291,6 +1332,7 @@ function startGL(ctx) {
       document.removeEventListener('visibilitychange', onVis); mq.removeEventListener?.('change', retheme);
       scene.traverse(obj => { obj.geometry?.dispose?.(); const m = obj.material; (Array.isArray(m) ? m : m ? [m] : []).forEach(x => { x.map?.dispose(); x.dispose(); }); });
       pmrem.dispose(); renderer.dispose(); renderer.forceContextLoss();
+      if (overlay) { overlayEnv.dispose(); overlay.dispose(); overlay.forceContextLoss(); }
     },
   };
 }
@@ -1375,16 +1417,45 @@ const loadImg = src => new Promise(r => { if (!src) return r(null); const i = ne
   i.onload = () => r(i); i.onerror = () => r(null); i.src = src; });
 
 const CSS = `
-:host { display: block; position: relative; overflow: hidden; overflow: clip; min-height: 420px; contain: layout paint;
+:host { display: block; position: relative; overflow: hidden; overflow: clip; padding-bottom: var(--lanyard-overhang, 0px);
   color: var(--lanyard-ink, #e7ebe9); -webkit-user-select: none; user-select: none;
   --_accent: var(--lanyard-accent, #8ea4ff); --_focus: var(--lanyard-focus, #ffd166);
   --_panel: var(--lanyard-panel, #1a1f22); --_line: var(--lanyard-line, #2d3437); --_muted: var(--lanyard-muted, #9aa39f);
-  --_body: var(--lanyard-font-body, ${DEFAULT_FONTS.body}); --_mono: var(--lanyard-font-mono, ${DEFAULT_FONTS.mono}); }
+  --_body: var(--lanyard-font-body, ${DEFAULT_FONTS.body}); --_mono: var(--lanyard-font-mono, ${DEFAULT_FONTS.mono});
+  --_ink: var(--lanyard-ink, #e7ebe9); }
 :host([hidden]) { display: none; }
-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: pan-y; z-index: 0; }
+/* Stacking (the element makes no stacking context of its own, so these share the page's): the canvas at 0, the
+   header slot at 2, page content laid over the overhang at 3 (the page's to set), the overlay canvas at 4, the
+   keyboard layer and tooltip at 5. */
+canvas.over { z-index: 4; pointer-events: none; touch-action: auto; }
+.head { position: relative; z-index: 2; pointer-events: none; }
+::slotted(*) { pointer-events: auto; }
+.area { position: relative; z-index: 1; min-height: 420px; pointer-events: none; }
+/* The hero: a title panel over the top of the wall, with the lanyards hanging behind it (from <lanyard-hero>). */
+.hero { padding: var(--lanyard-hero-pad, 40px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px))); }
+.hero-in { max-width: var(--lanyard-hero-max, 1180px); margin: 0 auto; }
+.hero-panel { pointer-events: auto; max-width: 820px; -webkit-user-select: text; user-select: text; color: var(--lanyard-ink, #e7ebe9);
+  background: var(--lanyard-hero-bg, rgba(13, 16, 19, 0.84)); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 14px; padding: 22px 26px 24px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  text-shadow: 0 1px 12px #13171a, 0 0 2px #13171a; }
+.hero-eyebrow { font: 12px var(--_mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--_muted); margin: 0 0 10px; }
+.hero-title { font-family: var(--lanyard-font-display, ${DEFAULT_FONTS.display}); font-stretch: 125%; font-weight: 850; font-size: clamp(40px, 7vw, 84px);
+  line-height: 0.92; letter-spacing: -0.01em; margin: 0; text-wrap: balance; overflow-wrap: anywhere; }
+.hero-text { max-width: 60ch; color: var(--lanyard-hero-text, #d6ddd9); margin: 14px 0 0; font: 17px/1.5 var(--_body); }
+.hero-links { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin: 22px 0 0; }
+.hero-links:empty { display: none; }
+.hero-link { text-shadow: none; display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.7rem 1.3rem; border-radius: 5px;
+  font: 700 16px/1.5 var(--_body); text-decoration: none; color: var(--_ink); box-shadow: inset 0 0 0 1px var(--_muted); }
+.hero-link:hover { box-shadow: inset 0 0 0 1px var(--_ink); }
+.hero-link.primary { background: var(--_accent); color: var(--lanyard-accent-ink, #0b1020); box-shadow: none; }
+.hero-link.primary:hover { filter: brightness(1.08); }
+.hero-mail { color: var(--_ink); font: 14px var(--_mono); text-underline-offset: 4px; }
+.hero a:focus-visible { outline: 2px solid var(--_ink); outline-offset: 3px; }
+@media (max-width: 600px) { .hero-panel { padding: 18px 18px 20px; border-radius: 12px; } }
 [hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.focus-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; overflow: clip; }
+.focus-layer { position: absolute; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; overflow: clip; }
 .badge-hit, .pin-hit { position: absolute; left: 0; top: 0; margin: 0; padding: 0; border: 0; background: transparent; color: transparent;
   pointer-events: none; transform-origin: 50% 50%; border-radius: 14px; font: inherit; cursor: pointer; }
 .pin-hit { border-radius: 50%; }
@@ -1407,8 +1478,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .hud dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 0; }
 .hud dt { color: var(--_accent); text-transform: uppercase; letter-spacing: 0.06em; }
 .hud dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-:host(.no-gl) { min-height: 0; height: auto !important; -webkit-user-select: text; user-select: text; }
+:host(.no-gl) { min-height: 0; height: auto !important; padding-bottom: 0; -webkit-user-select: text; user-select: text; }
 :host(.no-gl) .hint, :host(.no-gl) .focus-layer, :host(.no-gl) canvas { display: none; }
+:host(.no-gl) .area { min-height: 0; height: auto !important; pointer-events: auto; }
 .fallback { font: 16px/1.5 var(--_body); padding: 8px 0 24px; }
 .fallback > p { margin: 0 0 14px; color: var(--_muted); }
 .gl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
@@ -1421,9 +1493,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 `;
 
 const TEMPLATE = `<style>${CSS}</style>
-<canvas aria-hidden="true" part="canvas"></canvas>
-<div class="tip" id="tip" hidden aria-hidden="true"><strong id="tip-name"></strong><span id="tip-when"></span></div>
-<div class="focus-layer" id="focus-layer" role="group"><p class="sr-only" id="live" aria-live="polite"></p></div>
+<canvas aria-hidden="true" part="canvas" class="main"></canvas>
+<div class="head" id="head" part="header"><header class="hero" id="hero" part="hero" hidden></header><slot name="header"></slot></div>
+<div class="area" id="area" part="area">
 <p class="hint" id="hint" part="hint" aria-hidden="true"></p>
 <div class="hud" id="hud" part="hud" hidden>
   <dl>
@@ -1434,7 +1506,11 @@ const TEMPLATE = `<style>${CSS}</style>
     <dt>Frame</dt><dd id="hud-ms">–</dd>
   </dl>
 </div>
-<div class="fallback" id="fallback" hidden></div>`;
+<div class="fallback" id="fallback" hidden></div>
+</div>
+<canvas aria-hidden="true" part="overlay" class="over" id="over" hidden></canvas>
+<div class="tip" id="tip" hidden aria-hidden="true"><strong id="tip-name"></strong><span id="tip-when"></span></div>
+<div class="focus-layer" id="focus-layer" role="group"><p class="sr-only" id="live" aria-live="polite"></p></div>`;
 
 export class LanyardWall extends HTMLElement {
   static get observedAttributes() { return ['debug', 'reduced-motion', 'hint', 'label', 'labels', ...Object.values(LABEL_ATTRS)]; }
@@ -1451,7 +1527,9 @@ export class LanyardWall extends HTMLElement {
     this._onMQ = () => this._applyMotion();
     // Edits to the <lanyard-badge> / <lanyard-pin> markup redraw the affected cards in place.
     // (Attribute changes on the wall itself go through attributeChangedCallback, and include its own ready/style updates.)
-    this._mo = new MutationObserver(recs => { if (recs.some(r => !(r.type === 'attributes' && r.target === this))) this._queueSync(); });
+    this._mo = new MutationObserver(recs => {
+      if (recs.some(r => !(r.type === 'attributes' && r.target === this))) { this._renderHero(); this._queueSync(); }
+    });
     const layer = this._$('focus-layer');
     layer.addEventListener('click', e => {
       const f = e.target.closest('[data-flip]'); if (f) return this.flip(+f.dataset.flip);
@@ -1475,13 +1553,19 @@ export class LanyardWall extends HTMLElement {
   get labels() { return this._input.labels; }
   set labels(v) { this._input.labels = v; this._queueSync(); }
 
-  get reducedMotion() { return this.hasAttribute('reduced-motion') || this._mq.matches; }
+  // reduced-motion: present turns it on, reduced-motion="off" turns it off even when the system asks for it (for a
+  // page's own motion switch), and absent follows the system setting.
+  get reducedMotion() {
+    const a = this.getAttribute('reduced-motion');
+    return a === null ? this._mq.matches : !/^(off|false)$/i.test(a);
+  }
   set reducedMotion(on) { this.toggleAttribute('reduced-motion', !!on); }
 
   connectedCallback() {
     this._connected = true;
     this._mq.addEventListener?.('change', this._onMQ);
     this._mo.observe(this, { childList: true, subtree: true, attributes: true, characterData: true });
+    this._renderHero();
     this._start();
   }
   disconnectedCallback() {
@@ -1586,7 +1670,7 @@ export class LanyardWall extends HTMLElement {
     this._timers.forEach(clearTimeout); this._timers = []; clearTimeout(this._announceT);
     this._gl?.dispose(); this._gl = null;
     // a fresh canvas each start, so listeners from a previous run can't touch a disposed scene
-    const cv = this._root.querySelector('canvas'); cv.replaceWith(cv.cloneNode());
+    for (const cv of this._root.querySelectorAll('canvas')) cv.replaceWith(cv.cloneNode());
   }
   async _start() {
     const token = ++this._token;
@@ -1609,7 +1693,7 @@ export class LanyardWall extends HTMLElement {
     if (token !== this._token || !this._connected) return;   // config changed or removed while loading
     try {
       this._gl = startGL({
-        host: this, root: this._root, canvas: this._root.querySelector('canvas'), $: this._$, data: this.data, pins: this.pinData, o,
+        host: this, root: this._root, canvas: this._root.querySelector('canvas.main'), $: this._$, data: this.data, pins: this.pinData, o,
         reduce: this.reducedMotion, say: t => this._say(t), flip: i => this.flip(i), unwound: i => this._unwound(i),
         onReady: () => { this.setAttribute('ready', ''); this.dispatchEvent(new CustomEvent('lanyard-ready', { bubbles: true, composed: true })); },
       });
@@ -1628,6 +1712,38 @@ export class LanyardWall extends HTMLElement {
     const on = this.hasAttribute('debug');
     this._$('hud').hidden = !on || !this._gl;
     this._gl?.setView(on);
+  }
+  // <lanyard-hero>: a title panel at the top of the wall, built from its attributes (or its own <p> and <a> children).
+  //   eyebrow   small label over the title          heading  the title (an <h1>; heading-level="2" for an <h2>)
+  //   text      the body text                       email    shown as a mailto link after the buttons
+  //   links     "Label url | Label url": buttons, the first one filled
+  _renderHero() {
+    const el = this.querySelector(':scope > lanyard-hero'), box = this._$('hero');
+    if (!el) { box.hidden = true; box.textContent = ''; return; }
+    const a = n => el.getAttribute(n) || '';
+    const lvl = Math.min(6, Math.max(1, parseInt(a('heading-level'), 10) || 1));
+    const mk = (tag, cls, text) => { const n = document.createElement(tag); n.className = cls; n.setAttribute('part', cls); if (text != null) n.textContent = text; return n; };
+    const panel = mk('div', 'hero-panel');
+    if (a('eyebrow')) panel.append(mk('p', 'hero-eyebrow', a('eyebrow')));
+    if (a('heading')) panel.append(mk(`h${lvl}`, 'hero-title', a('heading')));
+    // body: the text attribute, or the <p> children (as plain text, one paragraph each)
+    const paras = el.querySelectorAll(':scope > p').length ? [...el.querySelectorAll(':scope > p')].map(p => p.textContent.trim()) : a('text') ? [a('text')] : [];
+    for (const t of paras) if (t) panel.append(mk('p', 'hero-text', t));
+    // links: <a> children, or the links attribute ("Label url" pairs split by "|"; the url is the last word)
+    const anchors = [...el.querySelectorAll(':scope > a[href]')];
+    const links = anchors.length ? anchors.map(x => ({ label: x.textContent.trim(), href: x.getAttribute('href'), target: x.getAttribute('target') }))
+      : a('links').split('|').map(t => t.trim()).filter(Boolean).map(t => { const k = t.lastIndexOf(' '); return k < 0 ? { label: t, href: t } : { label: t.slice(0, k).trim(), href: t.slice(k + 1) }; });
+    const row = mk('p', 'hero-links');
+    links.forEach((l, k) => {
+      const link = mk('a', `hero-link${k ? '' : ' primary'}`, l.label); link.setAttribute('part', k ? 'hero-link' : 'hero-link primary');
+      link.href = l.href; if (l.target) { link.target = l.target; link.rel = 'noopener'; }
+      if (!k) { const arrow = document.createElement('span'); arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '→'; link.append(arrow); }
+      row.append(link);
+    });
+    if (a('email')) { const m = mk('a', 'hero-mail', a('email')); m.href = `mailto:${a('email')}`; row.append(m); }
+    panel.append(row);
+    const inner = mk('div', 'hero-in'); inner.append(panel);
+    box.replaceChildren(inner); box.hidden = false;
   }
   _applyHint() {
     this._$('hint').textContent = this.hasAttribute('hint') ? this.getAttribute('hint') : 'Drag to swing · Tap to flip';

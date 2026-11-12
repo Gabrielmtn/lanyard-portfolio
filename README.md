@@ -14,11 +14,13 @@ It works without a mouse. Every badge has a real button over it that follows it 
 
 - [Set it up on your site](#set-it-up-on-your-site)
 - [Try the demo](#try-the-demo)
+- [Title panel](#title-panel-lanyard-hero)
 - [Badges](#badges-lanyard-badge)
 - [Pins](#pins-lanyard-pin)
 - [Printed labels](#printed-labels)
 - [JSON instead of markup](#json-instead-of-markup)
 - [Wall attributes, properties and events](#wall-attributes)
+- [Your own header, and room below](#your-own-header-and-room-below)
 - [Styling](#styling)
 - [Accessibility](#accessibility)
 - [How it works](#how-it-works)
@@ -69,10 +71,14 @@ Use your own by setting the [font custom properties](#styling). The component wa
 
 ### 4. Write your badges
 
-Add the wall where you want it, with one `<lanyard-badge>` per job. Your name and contact line go on the wall; everything about a job goes on its badge.
+Add the wall where you want it, with one `<lanyard-badge>` per job. Your name and contact line go on the wall; everything about a job goes on its badge. An optional `<lanyard-hero>` puts a title panel at the top, with the lanyards hanging behind it.
 
 ```html
 <lanyard-wall name="Alex Rivera" contact="If found, email: alex@example.com">
+
+  <lanyard-hero eyebrow="Product designer / UX engineer" heading="Alex Rivera" email="alex@example.com"
+                links="See my work /work | Case studies /case-studies"
+                text="I design and build accessible products, from research to the components that ship."></lanyard-hero>
 
   <lanyard-badge org="Northwind Labs" role="Product Designer" start="03/2017" end="08/2019"
                  logo="img/northwind.svg"
@@ -146,6 +152,37 @@ npx serve
 
 `index.html` shows four made-up badges and three pins. Below them is the wall's own markup, and every value in it is editable: change an attribute or a list item and that badge redraws in place while it keeps swinging. Click a color swatch for a picker. Faded attributes are ones a badge isn't using; type into one to turn it on. The Reduce motion button in the corner shows the calmer version.
 
+## Title panel: `<lanyard-hero>`
+
+A panel at the top of the wall for your name and a short introduction, with buttons and your email. The lanyards hang from the very top of the element, behind it, so it reads as the page's hero. Everything in the panel is real, selectable text and real links.
+
+```html
+<lanyard-hero eyebrow="UX Architect / Designer / Engineer" heading="Gabriel Martin" email="you@example.com"
+              links="See my work portfolio/ | Case studies case-studies/"
+              text="A sentence or two about what you do."></lanyard-hero>
+```
+
+| Attribute | What it does |
+| --- | --- |
+| `eyebrow` | Small uppercase label over the title |
+| `heading` | The title, as an `<h1>`. Set `heading-level="2"` for an `<h2>` |
+| `text` | The body text |
+| `links` | Buttons, as `Label url` pairs separated by `\|`. The url is the last word, and the first button is filled |
+| `email` | Shown as a `mailto:` link after the buttons |
+
+For more than one paragraph, or links that open in a new tab, write them as children instead: `<p>` elements become the body and `<a href>` elements become the buttons.
+
+```html
+<lanyard-hero eyebrow="Design engineer" heading="Alex Rivera" email="alex@example.com">
+  <p>First paragraph.</p>
+  <p>Second paragraph.</p>
+  <a href="/work">See my work</a>
+  <a href="https://github.com/alex" target="_blank">GitHub</a>
+</lanyard-hero>
+```
+
+Its colors come from `--lanyard-accent` (filled button), `--lanyard-accent-ink` (text on it), `--lanyard-ink` and `--lanyard-muted`; `--lanyard-hero-bg` sets the panel, `--lanyard-hero-max` the width it lines up with (default 1180px) and `--lanyard-hero-pad` the space around it. Restyle anything else with `::part(hero-panel)`, `::part(hero-title)`, `::part(hero-text)` and so on.
+
 ## Badges: `<lanyard-badge>`
 
 Only `org` is required; everything else has a default.
@@ -218,7 +255,7 @@ If both are present, the `badges` and `pins` properties win, then the markup, th
 | --- | --- |
 | `label` | Accessible name for the group of badges (default `Work history badges`) |
 | `hint` | The hint in the corner. Set `hint=""` to hide it |
-| `reduced-motion` | Forces reduced motion. It's also on automatically when the visitor's system asks for it |
+| `reduced-motion` | Forces reduced motion. It's also on automatically when the visitor's system asks for it. `reduced-motion="off"` forces full motion, for a page with its own motion switch |
 | `debug` | Shows the physics: rope nodes, constraints and frame timing |
 
 Plus the [printed-label](#printed-labels) defaults.
@@ -244,6 +281,26 @@ wall.reducedMotion = true;
 | `lanyard-flip` | `{ index, id, side }`, where `side` is `"front"` or `"back"` |
 | `lanyard-unwind` | `{ index, id }`, when a strap wound 7 half-twists lets go |
 
+## Your own header, and room below
+
+**A header of your own.** Anything with `slot="header"` inside the wall is placed at its top, like the title panel, with the lanyards hanging behind it. Use it when `<lanyard-hero>` doesn't fit your design. Your header's empty space lets drags through to the badges only if you set `pointer-events: none` on it and `auto` on the parts people click.
+
+```html
+<lanyard-wall>
+  <header slot="header" class="my-header">…</header>
+  <lanyard-badge …></lanyard-badge>
+</lanyard-wall>
+```
+
+**Room below the badges.** Set `--lanyard-overhang` and the element reaches that far below the badges. Pull the next section of your page up over it with a negative margin and a `z-index` of 3, and a badge dragged or swung low slides behind that section, while a second canvas draws it over the top. Without it, a badge dragged below the wall is simply cut off at the edge.
+
+```css
+lanyard-wall { --lanyard-overhang: 560px; }
+lanyard-wall + main { position: relative; z-index: 3; margin-top: -560px; }
+```
+
+For this to work the wall must not be its own stacking context, so don't give `<lanyard-wall>` an `opacity` below 1, a `transform`, a `filter` or a `z-index`.
+
 ## Styling
 
 The element sizes its own height to fit the badges, and lays them out for the width it has: one row on wide screens, two staggered columns on tablets, and a single overlapping stack on phones. Fonts and colors come from custom properties:
@@ -259,7 +316,7 @@ lanyard-wall {
 }
 ```
 
-The background is transparent, so the badges hang on whatever is behind the element. It never scrolls or adds a scrollbar, even when a badge is dragged off the side.
+The background is transparent, so the badges hang on whatever is behind the element. Parts you can style from outside: `canvas`, `overlay`, `header`, `area`, `hint`, `hud` and the `hero-*` parts above. It never scrolls or adds a scrollbar, even when a badge is dragged off the side.
 
 ## Accessibility
 

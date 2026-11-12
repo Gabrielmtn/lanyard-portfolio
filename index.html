@@ -39,6 +39,8 @@
     opacity: 0; transition: opacity 0.8s ease;
   }
   lanyard-wall[ready], lanyard-wall.no-gl { opacity: 1; }
+  /* on phones, room above the title panel for the Reduce motion button */
+  @media (max-width: 600px) { lanyard-wall { --lanyard-hero-pad: 58px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); } }
 
   /* reduce motion: top right of the badge area */
   .stage { position: relative; }
@@ -82,13 +84,18 @@
 <body>
 <header class="wrap">
   <h1>Lanyard Portfolio</h1>
-  <p>Hanging ID badges for a portfolio or about page. Drag one to swing it, tap to flip it over, or tab to a badge and press Enter. Arrow keys give it a push. Every badge below is plain HTML inside one <code>&lt;lanyard-wall&gt;</code> tag, so headings, labels and strap text are just attributes and list items. The companies are made up.</p>
+  <p>A web component of hanging ID badges for a portfolio. Drag a badge to swing it, tap it to flip it over, or tab to it and press Enter. Everything below, the title panel included, is plain HTML inside one <code>&lt;lanyard-wall&gt;</code> tag, and you can edit that markup under the wall. Alex and the companies are made up.</p>
 </header>
 
 <div class="stage">
 <button type="button" id="motion" class="motion" aria-pressed="false">Reduce motion</button>
 <lanyard-wall hint="" name="Alex Rivera" contact="If found, email: alex@example.com" seal="Lanyard Portfolio · Alumni"
               labels="UX design | UX engineering" label="Alex Rivera's work history">
+
+  <!-- the title panel at the top of the wall; the lanyards hang behind it -->
+  <lanyard-hero eyebrow="Product designer / UX engineer" heading="Alex Rivera" email="alex@example.com"
+                links="See my work #work | Case studies #case-studies"
+                text="I design and build accessible products, from research with the people who use them to the components that ship. Swing a badge to see where I've worked."></lanyard-hero>
 
   <lanyard-badge id="northwind" org="Northwind Labs" logo="demo/logos/northwind.svg" role="Product Designer" start="03/2017" end="08/2019"
                  color="#1d3557" band="#a8dadc" band2="#457b9d" strap="#14243b">
@@ -174,6 +181,7 @@
   const BADGE_ATTRS = [['id'], ['org', 'Organization'], ['role', 'Job title'], ['start', 'MM/YYYY'], ['end', 'blank = present'],
     ['logo', 'image path or URL'], ['sub', 'line under the logo'], ['tag', 'Alumni (from the wall)'], ['date-label', 'Date'],
     ['title-label', 'Title'], ['strap-text', 'name · org'], ['color', '#hex'], ['band', '#hex'], ['band2', '#hex'], ['strap', '#hex']];
+  const HERO_ATTRS = ['eyebrow', 'heading', 'text', 'links', 'email'];
   const WALL_ATTRS = ['name', 'contact', 'seal', 'labels', 'label'], PIN_ATTRS = ['name', 'text', 'small', 'ring', 'color', 'note'];
   const COLOR = new Set(['color', 'band', 'band2', 'strap', 'strap-ink']);
 
@@ -218,7 +226,8 @@
     {
       openTag(wall, '', WALL_ATTRS.map(n => [n]), out, false); out.push(['', false]);
       [...wall.children].forEach(el => {
-        if (el.localName === 'lanyard-badge') { badgeLines(el, '  ', out, false, true); out.push(['', false]); }
+        if (el.localName === 'lanyard-hero') { openTag(el, '  ', HERO_ATTRS.map(n => [n, '']), out, false); out.push([`  ${tag('&lt;/lanyard-hero&gt;')}`, false], ['', false]); }
+        else if (el.localName === 'lanyard-badge') { badgeLines(el, '  ', out, false, true); out.push(['', false]); }
         else if (el.localName === 'lanyard-pin') {
           const parts = PIN_ATTRS.map(n => attrHTML(el, n)).filter(Boolean);
           out.push([`  ${tag('&lt;lanyard-pin')} ${parts.join(' ')}${tag('&gt;&lt;/lanyard-pin&gt;')}`, false]);
