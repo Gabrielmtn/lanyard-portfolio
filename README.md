@@ -6,7 +6,7 @@ Hanging ID badges on lanyards, for a portfolio or about page. Each badge is a jo
 
 It works without a mouse. Every badge has a real button over it that follows it as it swings, so keyboard and screen reader users can reach, flip and hear each one. It honors reduced motion, and without WebGL it shows the same content as a plain list.
 
-- **Live demo:** open `index.html` (see [Try the demo](#try-the-demo)). Below the badges is their markup, and you can edit it in place.
+- **Live demo:** [gabrielmtn.github.io/lanyard-portfolio](https://gabrielmtn.github.io/lanyard-portfolio/). Below the badges is their markup, and you can edit it in place.
 - **No build step.** One JavaScript file plus [three.js](https://threejs.org), loaded from a CDN or installed with npm.
 - **MIT licensed.** Use it on your own site, change it, ship it.
 
@@ -142,7 +142,7 @@ lanyard-wall:not(:defined) lanyard-pin { display: none; }
 
 ## Try the demo
 
-Clone the repository and serve it:
+The demo is live at [gabrielmtn.github.io/lanyard-portfolio](https://gabrielmtn.github.io/lanyard-portfolio/), served by GitHub Pages straight from `index.html` on `main`. To run it yourself, clone the repository and serve it:
 
 ```sh
 git clone https://github.com/Gabrielmtn/lanyard-portfolio.git
