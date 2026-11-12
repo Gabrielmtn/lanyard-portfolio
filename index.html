@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lanyard Portfolio</title>
+<meta name="description" content="A web component of hanging ID badges on lanyards, with rope physics and full keyboard and screen reader support.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anybody:wdth,wght@50..150,400..900&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600&display=swap">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #13171a; --ink: #e7ebe9; --muted: #9aa39f; --line: #2d3437; --accent: #8ea4ff;
+    --f-body: "Instrument Sans", system-ui, sans-serif; --f-mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--f-body); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  header { padding-block: 40px 8px; }
+  h1 { font: 850 clamp(36px, 6vw, 64px)/0.95 "Anybody", "Arial Black", sans-serif; font-stretch: 125%; margin: 0 0 12px; }
+  p { margin: 0 0 12px; max-width: 62ch; color: var(--muted); }
+  code { font-family: var(--f-mono); font-size: 0.9em; color: var(--ink); }
+  a { color: var(--accent); }
+
+  /* the component: fonts and colors are set with custom properties */
+  lanyard-wall {
+    --lanyard-font-display: "Anybody", "Arial Black", sans-serif;
+    --lanyard-font-body: "Instrument Sans", system-ui, sans-serif;
+    --lanyard-font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    --lanyard-accent: #8ea4ff;
+    --lanyard-shadow: 0.5;
+    opacity: 0; transition: opacity 0.8s ease;
+  }
+  lanyard-wall[ready], lanyard-wall.no-gl { opacity: 1; }
+
+  /* reduce motion: top right of the badge area */
+  .stage { position: relative; }
+  .motion { position: absolute; z-index: 2; top: 14px; right: max(16px, env(safe-area-inset-right, 0px));
+    font: 500 12px var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); background: #13171acc;
+    border: 1px solid var(--ink); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
+  .motion[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  /* playground: the badge markup itself is the editor */
+  .play { padding-block: 8px 64px; }
+  .editor { border: 1px solid var(--line); border-radius: 10px; background: #0d1012; overflow: hidden; min-width: 0; }
+  pre.code { position: relative; margin: 0; padding: 12px 0 16px; overflow: auto; max-height: min(80vh, 820px);
+    font: 13px/1.7 var(--f-mono); color: #c9d1ce; counter-reset: ln; }
+  pre.code .ln { display: block; padding: 0 20px 0 0; white-space: pre; counter-increment: ln; }
+  pre.code .ln::before { content: counter(ln); display: inline-block; width: 3.2em; padding-right: 1.2em; text-align: right; color: #4a5451; user-select: none; -webkit-user-select: none; }
+  .t { color: #8ea4ff; } .a { color: #f4c38b; } .q { color: #9fd8b3; } .x { color: #e7ebe9; }
+  .unset .a, .unset .q { opacity: 0.45; }
+  /* editable values: text in quotes and list items */
+  [contenteditable] { outline: none; border-radius: 3px; color: #9fd8b3; padding: 0 1px; caret-color: var(--ink); cursor: text;
+    background-image: linear-gradient(#9fd8b355, #9fd8b355); background-size: 100% 1px; background-position: 0 100%; background-repeat: no-repeat; }
+  .x[contenteditable] { color: var(--ink); background-image: linear-gradient(#e7ebe955, #e7ebe955); }
+  [contenteditable]:hover { background-color: #ffffff0d; }
+  [contenteditable]:focus { background-color: #8ea4ff26; box-shadow: 0 0 0 1px var(--accent); }
+  [contenteditable]:empty::before { content: attr(data-ph); color: #6c7672; font-style: italic; }
+  .bad[contenteditable] { color: #ff8a80; box-shadow: 0 0 0 1px #ff8a80; }
+  /* color swatch that opens the system color picker */
+  .chip { position: relative; display: inline-block; width: 0.95em; height: 0.95em; margin: 0 4px 0 2px; border-radius: 3px; vertical-align: -0.12em;
+    box-shadow: 0 0 0 1px #ffffff50 inset; cursor: pointer; }
+  .chip input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+  .chip:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (max-width: 600px) { pre.code { font-size: 12px; } pre.code .ln::before { width: 2.4em; padding-right: 0.8em; } }
+
+  /* Before the component loads, or without JavaScript, the badge markup shows as plain text */
+  lanyard-wall:not(:defined) { display: block; padding: 0 16px; }
+  lanyard-wall:not(:defined) lanyard-badge { display: block; margin: 0 0 16px; }
+  lanyard-wall:not(:defined) lanyard-badge::before { content: attr(org) " · " attr(role); display: block; font-weight: 600; }
+  lanyard-wall:not(:defined) lanyard-section::before { content: attr(label); display: block; color: var(--muted); }
+  lanyard-wall:not(:defined) lanyard-pin { display: none; }
+</style>
+</head>
+<body>
+<header class="wrap">
+  <h1>Lanyard Portfolio</h1>
+  <p>Hanging ID badges for a portfolio or about page. Drag one to swing it, tap to flip it over, or tab to a badge and press Enter. Arrow keys give it a push. Every badge below is plain HTML inside one <code>&lt;lanyard-wall&gt;</code> tag, so headings, labels and strap text are just attributes and list items. The companies are made up.</p>
+</header>
+
+<div class="stage">
+<button type="button" id="motion" class="motion" aria-pressed="false">Reduce motion</button>
+<lanyard-wall hint="" name="Alex Rivera" contact="If found, email: alex@example.com" seal="Lanyard Portfolio · Alumni"
+              labels="UX design | UX engineering" label="Alex Rivera's work history">
+
+  <lanyard-badge id="northwind" org="Northwind Labs" logo="demo/logos/northwind.svg" role="Product Designer" start="03/2017" end="08/2019"
+                 color="#1d3557" band="#a8dadc" band2="#457b9d" strap="#14243b">
+    <lanyard-section label="UX design">
+      <ul data-side="front"><li>Design systems</li><li>Usability testing</li></ul>
+      <ul data-side="back"><li>Built the first shared design system for three product teams</li></ul>
+    </lanyard-section>
+    <lanyard-section label="UX engineering">
+      <ul data-side="front"><li>React components</li><li>Storybook</li></ul>
+      <ul data-side="back"><li>Shipped 40 accessible React components with docs</li></ul>
+    </lanyard-section>
+  </lanyard-badge>
+
+  <!-- this badge renames its sections and both field labels -->
+  <lanyard-badge id="bluefin" org="Bluefin Health" logo="demo/logos/bluefin.svg" role="UX Engineer" start="09/2019" end="06/2022"
+                 color="#e9f5ef" band="#2a9d8f" band2="#1f6f66" strap="#1f6f66"
+                 date-label="Tenure" title-label="Role">
+    <lanyard-section label="Research">
+      <ul data-side="front"><li>Patient journeys</li><li>Service design</li></ul>
+      <ul data-side="back"><li>Mapped intake from referral to first visit with clinic staff</li></ul>
+    </lanyard-section>
+    <lanyard-section label="Accessibility">
+      <ul data-side="front"><li>WCAG 2.1 AA</li><li>Design tokens</li></ul>
+      <ul data-side="back"><li>Took the patient portal to WCAG 2.1 AA</li></ul>
+    </lanyard-section>
+  </lanyard-badge>
+
+  <!-- a corner tag and custom strap print -->
+  <lanyard-badge id="copperleaf" org="Copperleaf Bank" logo="demo/logos/copperleaf.svg" role="Senior UX Designer" start="07/2022" end="12/2024"
+                 color="#7a3b12" band="#f4a261" band2="#b5551d" strap="#4a230a"
+                 tag="Contract" strap-text="Copperleaf · Digital banking">
+    <lanyard-section label="UX design">
+      <ul data-side="front"><li>Information architecture</li><li>Workshops</li></ul>
+      <ul data-side="back"><li>Reworked account navigation around how customers named things</li></ul>
+    </lanyard-section>
+    <lanyard-section label="UX engineering">
+      <ul data-side="front"><li>Prototyping</li><li>Angular</li></ul>
+      <ul data-side="back"><li>Prototyped the new transfer flow in Angular</li></ul>
+    </lanyard-section>
+  </lanyard-badge>
+
+  <lanyard-badge id="atlas" org="Atlas Civic" logo="demo/logos/atlas.svg" role="Design Lead" start="01/2025"
+                 color="#2b1660" band="#b18cf2" band2="#5b2bb5" strap="#1c0d45" tag="Current">
+    <lanyard-section label="UX design">
+      <ul data-side="front"><li>Research ops</li><li>Plain language</li></ul>
+      <ul data-side="back"><li>Set up research with residents for three city services</li></ul>
+    </lanyard-section>
+    <lanyard-section label="UX engineering">
+      <ul data-side="front"><li>Web components</li><li>Performance</li></ul>
+      <ul data-side="back"><li>Cut form load time in half with web components</li></ul>
+    </lanyard-section>
+  </lanyard-badge>
+
+  <lanyard-pin name="Design Meetup" text="Design|Meetup" ring="Design Meetup · Organizer" color="#ffb31a" note="Organizer · 2018"></lanyard-pin>
+  <lanyard-pin name="Open Source" text="{ }" small="OSS" ring="Open Source · Contributor" color="#e8459b" note="Contributor"></lanyard-pin>
+  <lanyard-pin name="Code Mentors" text="Code|Mentors" ring="Code Mentors · Volunteer" color="#0f8b8d" note="Volunteer · 2021"></lanyard-pin>
+</lanyard-wall>
+</div>
+
+<div class="wrap">
+  <section class="play" aria-label="Badge markup editor">
+    <div class="editor">
+      <pre class="code" id="code" aria-label="Wall markup, editable"></pre>
+    </div>
+  </section>
+</div>
+
+<script type="module">
+  import './src/lanyard-wall.js';
+  const wall = document.querySelector('lanyard-wall');
+  const motion = document.getElementById('motion');
+  motion.addEventListener('click', () => {
+    const on = motion.getAttribute('aria-pressed') !== 'true';
+    motion.setAttribute('aria-pressed', String(on)); wall.toggleAttribute('reduced-motion', on);
+  });
+  // ---- playground: editable markup ----------------------------------------------------------------------------
+  const code = document.getElementById('code');
+  const HEX = /^#(?:[0-9a-f]{3}){1,2}$/i;
+  const full = h => h.length === 4 ? '#' + [...h.slice(1)].map(c => c + c).join('') : h.toLowerCase();
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+  // Every attribute a badge understands, shown on every badge: faded, with a hint, when unset.
+  const BADGE_ATTRS = [['id'], ['org', 'Organization'], ['role', 'Job title'], ['start', 'MM/YYYY'], ['end', 'blank = present'],
+    ['logo', 'image path or URL'], ['sub', 'line under the logo'], ['tag', 'Alumni (from the wall)'], ['date-label', 'Date'],
+    ['title-label', 'Title'], ['strap-text', 'name · org'], ['color', '#hex'], ['band', '#hex'], ['band2', '#hex'], ['strap', '#hex']];
+  const WALL_ATTRS = ['name', 'contact', 'seal', 'labels', 'label'], PIN_ATTRS = ['name', 'text', 'small', 'ring', 'color', 'note'];
+  const COLOR = new Set(['color', 'band', 'band2', 'strap', 'strap-ink']);
+
+  // ---- render: lines of highlighted markup; values are contenteditable and point back at their element ----
+  let refs = [];   // element for each data-r
+  const ref = el => { refs.push(el); return refs.length - 1; };
+  const tag = s => `<span class="t">${s}</span>`;
+  function attrHTML(el, name, ph) {
+    const v = el.getAttribute(name), set = v !== null && v !== '';
+    if (!set && ph === undefined) return null;
+    const color = COLOR.has(name) && set && HEX.test(v)
+      ? `<label class="chip" style="background:${v}"><input type="color" value="${full(v)}" data-r="${ref(el)}" data-attr="${name}" aria-label="${name} color"></label>` : '';
+    if (name === 'id') return `<span class="a">id</span>=<span class="q">"${esc(v)}"</span>`;   // left as is: it names the badge in events
+    return `<span class="${set ? '' : 'unset'}"><span class="a">${name}</span>=<span class="q">"</span>${color}<span contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="${name}" data-r="${ref(el)}" data-attr="${name}" data-ph="${esc(ph || '')}">${set ? esc(v) : ''}</span><span class="q">"</span></span>`;
+  }
+  // an opening tag with one attribute per line, lined up after the tag name
+  function openTag(el, ind, list, out, hl) {
+    const parts = list.map(([n, ph]) => attrHTML(el, n, ph)).filter(Boolean);
+    const pad = ind + ' '.repeat(el.localName.length + 2);
+    if (!parts.length) return out.push([`${ind}${tag('&lt;' + el.localName + '&gt;')}`, hl]);
+    parts.forEach((p, k) => out.push([`${k ? pad : ind + tag('&lt;' + el.localName) + ' '}${p}${k === parts.length - 1 ? tag('&gt;') : ''}`, hl]));
+  }
+  function badgeLines(b, ind, out, hl, every) {
+    const list = every ? BADGE_ATTRS : BADGE_ATTRS.map(([n]) => [n]);
+    openTag(b, ind, list, out, hl);
+    b.querySelectorAll(':scope > lanyard-section').forEach(sec => {
+      out.push([`${ind}  ${tag('&lt;lanyard-section')} ${attrHTML(sec, 'label', 'heading')}${tag('&gt;')}`, hl]);
+      for (const side of ['front', 'back']) {
+        let ul = sec.querySelector(`:scope > ul[data-side="${side}"]`);
+        if (!ul) { ul = document.createElement('ul'); ul.dataset.side = side; sec.append(ul); }
+        if (!ul.children.length) ul.append(document.createElement('li'));
+        out.push([`${ind}    ${tag('&lt;ul')} <span class="a">data-side</span>=<span class="q">"${side}"</span>${tag('&gt;')}`, hl]);
+        for (const li of ul.children) out.push([`${ind}      ${tag('&lt;li&gt;')}<span class="x" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="${side} item" data-r="${ref(li)}" data-li data-ph="${side === 'front' ? 'short item' : 'a sentence'}">${esc(li.textContent)}</span>${tag('&lt;/li&gt;')}`, hl]);
+        out.push([`${ind}    ${tag('&lt;/ul&gt;')}`, hl]);
+      }
+      out.push([`${ind}  ${tag('&lt;/lanyard-section&gt;')}`, hl]);
+    });
+    out.push([`${ind}${tag('&lt;/lanyard-badge&gt;')}`, hl]);
+  }
+  function render(focusEl, focusAttr, atEnd) {
+    refs = []; const out = [];
+    {
+      openTag(wall, '', WALL_ATTRS.map(n => [n]), out, false); out.push(['', false]);
+      [...wall.children].forEach(el => {
+        if (el.localName === 'lanyard-badge') { badgeLines(el, '  ', out, false, true); out.push(['', false]); }
+        else if (el.localName === 'lanyard-pin') {
+          const parts = PIN_ATTRS.map(n => attrHTML(el, n)).filter(Boolean);
+          out.push([`  ${tag('&lt;lanyard-pin')} ${parts.join(' ')}${tag('&gt;&lt;/lanyard-pin&gt;')}`, false]);
+        }
+      });
+      out.push(['', false], [tag('&lt;/lanyard-wall&gt;'), false]);
+    }
+    code.innerHTML = out.map(([h, hl]) => `<span class="ln${hl ? ' hl' : ''}">${h || ' '}</span>`).join('');
+    if (focusEl) {
+      const r = refs.indexOf(focusEl);
+      const t = code.querySelector(focusAttr ? `[data-r="${r}"][data-attr="${focusAttr}"][contenteditable]` : `[data-r="${r}"][contenteditable]`);
+      if (t) { t.focus(); const s = getSelection(), rg = document.createRange(); rg.selectNodeContents(t); rg.collapse(!atEnd ? true : false); s.removeAllRanges(); s.addRange(rg); }
+    }
+  }
+
+  // ---- edits write straight back to the markup ----
+  const target = n => refs[+n.dataset.r];
+  code.addEventListener('input', e => {
+    const n = e.target, el = target(n); if (!el) return;
+    if (n.type === 'color') {   // swatch
+      el.setAttribute(n.dataset.attr, n.value);
+      const txt = code.querySelector(`[contenteditable][data-r="${n.dataset.r}"][data-attr="${n.dataset.attr}"]`);
+      if (txt) txt.textContent = n.value; n.parentElement.style.background = n.value; return;
+    }
+    const v = n.textContent.replace(/\n/g, ' ');
+    if ('li' in n.dataset) { el.textContent = v; return; }
+    const a = n.dataset.attr;
+    n.parentElement.classList.toggle('unset', !v);
+    if (COLOR.has(a) && v) {
+      const ok = HEX.test(v.trim()); n.classList.toggle('bad', !ok);
+      if (ok) { el.setAttribute(a, full(v.trim())); const chip = n.previousElementSibling; if (chip?.classList.contains('chip')) { chip.style.background = v.trim(); chip.firstChild.value = full(v.trim()); } }
+      return;
+    }
+    if (v) el.setAttribute(a, v); else el.removeAttribute(a);
+  });
+  code.addEventListener('keydown', e => {
+    const n = e.target; if (!n.isContentEditable) return;
+    const el = target(n);
+    if (e.key === 'Escape') { n.blur(); return; }
+    if (e.key !== 'Enter' && e.key !== 'Backspace') return;
+    if ('li' in n.dataset) {
+      if (e.key === 'Enter') {   // new item after this one, carrying any text after the caret
+        e.preventDefault();
+        const s = getSelection(), off = s.rangeCount ? s.getRangeAt(0).startOffset : n.textContent.length;
+        const before = n.textContent.slice(0, off), after = n.textContent.slice(off);
+        el.textContent = before; const li = document.createElement('li'); li.textContent = after; el.after(li);
+        render(li); return;
+      }
+      if (n.textContent === '' && el.parentElement.children.length > 1) {   // Backspace on an empty item removes it
+        e.preventDefault(); const prev = el.previousElementSibling || el.nextElementSibling; el.remove(); render(prev, null, true); return;
+      }
+      return;
+    }
+    if (e.key === 'Enter') {   // attributes are one line: Enter moves to the next value
+      e.preventDefault();
+      const all = [...code.querySelectorAll('[contenteditable]')], k = all.indexOf(n);
+      (all[k + 1] || n).focus();
+    }
+  });
+  // paste as plain text on one line (plaintext-only covers most browsers; this covers the rest)
+  code.addEventListener('paste', e => {
+    if (!e.target.isContentEditable) return; e.preventDefault();
+    document.execCommand('insertText', false, (e.clipboardData?.getData('text/plain') || '').replace(/\s*\n\s*/g, ' '));
+  });
+  // tidy up when leaving a value (expand short hex, drop a bad one)
+  code.addEventListener('focusout', e => { if (!code.contains(e.relatedTarget)) requestAnimationFrame(() => { if (!code.contains(document.activeElement)) { render(); } }); });
+
+  // changes from anywhere else (the wall's own API, devtools) redraw the code, unless someone is typing in it
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return; queued = true;
+    requestAnimationFrame(() => { queued = false; if (!code.contains(document.activeElement)) render(); });
+  }).observe(wall, { subtree: true, childList: true, attributes: true, characterData: true });
+
+  render();
+</script>
+</body>
+</html>

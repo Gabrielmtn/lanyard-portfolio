@@ -1,0 +1,37 @@
+{
+  "name": "lanyard-portfolio",
+  "version": "0.1.0",
+  "description": "A web component of hanging ID badges on lanyards, with rope physics and full keyboard and screen reader support.",
+  "type": "module",
+  "main": "./src/lanyard-wall.js",
+  "module": "./src/lanyard-wall.js",
+  "exports": {
+    ".": "./src/lanyard-wall.js"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": true,
+  "peerDependencies": {
+    "three": ">=0.160.0"
+  },
+  "keywords": [
+    "web-component",
+    "custom-element",
+    "three",
+    "physics",
+    "portfolio",
+    "lanyard",
+    "badge",
+    "accessibility"
+  ],
+  "author": "Gabriel Martin <Gabriel@GabrielMartin.dev>",
+  "license": "MIT",
+  "homepage": "https://github.com/Gabrielmtn/lanyard-portfolio#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gabrielmtn/lanyard-portfolio.git"
+  }
+}
