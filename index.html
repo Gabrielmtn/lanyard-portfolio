@@ -44,6 +44,13 @@
 
   /* reduce motion: top right of the badge area */
   .stage { position: relative; }
+  /* Room to drag a badge well below the wall: the element reaches --ext further down, under the editor, which is
+     pulled up over it. A badge dragged down there slides over the editor (the wall draws it on its overlay canvas). */
+  :root { --ext: 520px; }
+  @media (max-width: 700px) { :root { --ext: 400px; } }
+  lanyard-wall { --lanyard-overhang: var(--ext); }
+  .stage + .wrap { position: relative; z-index: 3; margin-top: calc(-1 * var(--ext)); }
+  :root:has(lanyard-wall.no-gl) { --ext: 0px; }
   .motion { position: absolute; z-index: 2; top: 14px; right: max(16px, env(safe-area-inset-right, 0px));
     font: 500 12px var(--f-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); background: #13171acc;
     border: 1px solid var(--ink); border-radius: 999px; padding: 8px 14px; cursor: pointer; }
