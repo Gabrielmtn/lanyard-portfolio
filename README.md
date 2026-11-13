@@ -235,7 +235,7 @@ Every piece of fixed text on a card or strap can be changed. Set it on `<lanyard
 | `date-label`, `title-label` | `Date`, `Title` | Small labels over the dates and the role |
 | `strap-text` | name · org | Repeated along the strap |
 | `contact` | none | Bottom of the back, such as `If found, email: you@example.com` |
-| `seal` | `Lanyard Portfolio · Alumni` | Around the holographic seal |
+| `seal` | `Lanyard Hero · Alumni` | Around the holographic seal |
 | `empty-heading`, `empty-text` | `On the job`, `Nothing listed yet.` | The back, when a badge has no details |
 
 On the wall, `labels="UX design | UX engineering"` sets the default section headings for badges whose sections have no `label`.
@@ -299,7 +299,7 @@ wall.reducedMotion = true;
 **A line in the corner.** Anything with `slot="corner"` sits in the bottom-right corner of the badge area, in small type: a credit, or a link.
 
 ```html
-<a slot="corner" href="https://github.com/Gabrielmtn/lanyard-portfolio">Made with Lanyard Portfolio</a>
+<a slot="corner" href="https://github.com/Gabrielmtn/lanyard-portfolio">Made with Lanyard Hero Component</a>
 ```
 
 Style it from outside with `::part(corner)`. On narrow screens it shares the bottom edge with the hint, so either hide the hint (`hint=""`) or move one of them up.
