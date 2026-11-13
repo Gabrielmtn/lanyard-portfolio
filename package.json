@@ -1,5 +1,5 @@
 {
-  "name": "lanyard-portfolio",
+  "name": "lanyard-hero-component",
   "version": "0.1.0",
   "description": "A web component of hanging ID badges on lanyards, with rope physics and full keyboard and screen reader support.",
   "type": "module",
@@ -29,9 +29,9 @@
   ],
   "author": "Gabriel Martin <Gabriel@GabrielMartin.dev>",
   "license": "MIT",
-  "homepage": "https://github.com/Gabrielmtn/lanyard-portfolio#readme",
+  "homepage": "https://github.com/Gabrielmtn/lanyard-hero-component#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Gabrielmtn/lanyard-portfolio.git"
+    "url": "git+https://github.com/Gabrielmtn/lanyard-hero-component.git"
   }
 }
