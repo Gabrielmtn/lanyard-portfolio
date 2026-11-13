@@ -1,4 +1,4 @@
-# Lanyard Portfolio
+# Lanyard Hero Component
 Demo: [gabrielmtn.github.io/lanyard-portfolio](https://gabrielmtn.github.io/lanyard-portfolio/)
 My version:  [https://gabrielmartin.dev/](https://gabrielmartin.dev/) 
 
