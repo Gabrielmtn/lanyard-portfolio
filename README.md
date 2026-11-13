@@ -162,7 +162,7 @@ A panel at the top of the wall for your name and a short introduction, with butt
 
 ```html
 <lanyard-hero eyebrow="UX Architect / Designer / Engineer" heading="Gabriel Martin" email="you@example.com"
-              links="See my work portfolio/ | Case studies case-studies/"
+              links="See my work case-studies/"
               text="A sentence or two about what you do."></lanyard-hero>
 ```
 
